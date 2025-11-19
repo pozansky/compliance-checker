@@ -2,7 +2,8 @@
 
 import os
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings  # ✅ 只用这个
+from langchain_community.embeddings import HuggingFaceEmbeddings  # ✅ 修正这里
+
 from langchain_openai import ChatOpenAI                  # ✅ 用于 DashScope（兼容模式）
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
