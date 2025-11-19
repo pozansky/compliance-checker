@@ -1,10 +1,9 @@
 # src/rag_engine.py
-
 import os
+import sys
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings  # ✅ 修正这里
-
-from langchain_openai import ChatOpenAI                  # ✅ 用于 DashScope（兼容模式）
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -14,14 +13,19 @@ from typing import Dict, Any
 os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
 
 class ComplianceRAGEngine:
-    def __init__(self, rules_file: str = "compliance_rules.yaml"):
+    def __init__(self, rules_file: str = None):
         from .rule_loader import load_all_rules
         from .document_builder import build_rule_documents
         
+        # 自动查找规则文件
+        if rules_file is None:
+            rules_file = self._find_rules_file()
+        
+        print(f"使用规则文件: {rules_file}")
         rules = load_all_rules(rules_file)
         documents = build_rule_documents(rules)
         
-        # ✅ 使用 HuggingFace 本地嵌入模型，无需 API Key
+        # 使用 HuggingFace 本地嵌入模型
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         )
@@ -29,7 +33,7 @@ class ComplianceRAGEngine:
         self.vectorstore = FAISS.from_documents(documents, embeddings)
         self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
         
-        # ✅ 使用 DashScope 的 Qwen 模型（通过 OpenAI 兼容接口）
+        # 使用 DashScope 的 Qwen 模型（通过 OpenAI 兼容接口）
         self.llm = ChatOpenAI(
             model="qwen-max",
             openai_api_key=os.getenv("DASHSCOPE_API_KEY"),
@@ -51,7 +55,7 @@ class ComplianceRAGEngine:
 你必须且只能按以下格式输出，不要任何其他文字：
 
 是否违规：是/否
-触发事件：[事件名称，若不违规则写“无”]
+触发事件：[事件名称，若不违规则写"无"]
 理由：[简明理由，引用规则中的关键词或逻辑]
 """)
         
@@ -61,6 +65,30 @@ class ComplianceRAGEngine:
             | self.llm
             | StrOutputParser()
         )
+
+    def _find_rules_file(self):
+        """自动查找规则文件路径"""
+        # 获取当前文件所在目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)  # 项目根目录
+        
+        # 可能的规则文件路径
+        possible_paths = [
+            os.path.join(project_root, "compliance_rules.yaml"),  # 项目根目录
+            os.path.join(current_dir, "compliance_rules.yaml"),   # src目录
+            "compliance_rules.yaml",                              # 当前工作目录
+            "./compliance_rules.yaml",                            # 当前工作目录
+            "/mount/src/compliance-checker/compliance_rules.yaml", # Streamlit Cloud路径
+            "/mount/src/compliance-checker/compliance-rag/compliance_rules.yaml", # 可能的子目录
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"找到规则文件: {path}")
+                return path
+        
+        # 如果都找不到，抛出详细错误
+        raise FileNotFoundError(f"未找到规则文件。检查了以下路径: {possible_paths}")
 
     def predict(self, text: str) -> Dict[str, Any]:
         raw_response = self.chain.invoke(text).strip()
