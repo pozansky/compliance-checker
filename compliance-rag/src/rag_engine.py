@@ -1,6 +1,6 @@
 # src/rag_engine.py
 import os
-import sys
+import yaml
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, Any
 
-# 设置 DashScope API Key（用于 Qwen）
+# 设置 DashScope API Key
 os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
 
 class ComplianceRAGEngine:
@@ -17,9 +17,9 @@ class ComplianceRAGEngine:
         from .rule_loader import load_all_rules
         from .document_builder import build_rule_documents
         
-        # 自动查找规则文件
+        # 自动查找或创建规则文件
         if rules_file is None:
-            rules_file = self._find_rules_file()
+            rules_file = self._find_or_create_rules_file()
         
         print(f"使用规则文件: {rules_file}")
         rules = load_all_rules(rules_file)
@@ -33,7 +33,7 @@ class ComplianceRAGEngine:
         self.vectorstore = FAISS.from_documents(documents, embeddings)
         self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
         
-        # 使用 DashScope 的 Qwen 模型（通过 OpenAI 兼容接口）
+        # 使用 DashScope 的 Qwen 模型
         self.llm = ChatOpenAI(
             model="qwen-max",
             openai_api_key=os.getenv("DASHSCOPE_API_KEY"),
@@ -66,20 +66,19 @@ class ComplianceRAGEngine:
             | StrOutputParser()
         )
 
-    def _find_rules_file(self):
-        """自动查找规则文件路径"""
-        # 获取当前文件所在目录
+    def _find_or_create_rules_file(self):
+        """查找或创建规则文件（在项目根目录）"""
+        # 获取项目根目录
+        # 方法1：从当前文件向上两级到项目根目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)  # 项目根目录
+        project_root = os.path.dirname(current_dir)  # 向上到项目根目录
         
-        # 可能的规则文件路径
+        # 可能的规则文件路径（优先项目根目录）
         possible_paths = [
             os.path.join(project_root, "compliance_rules.yaml"),  # 项目根目录
-            os.path.join(current_dir, "compliance_rules.yaml"),   # src目录
             "compliance_rules.yaml",                              # 当前工作目录
             "./compliance_rules.yaml",                            # 当前工作目录
-            "/mount/src/compliance-checker/compliance_rules.yaml", # Streamlit Cloud路径
-            "/mount/src/compliance-checker/compliance-rag/compliance_rules.yaml", # 可能的子目录
+            os.path.join(current_dir, "compliance_rules.yaml"),   # src目录（备选）
         ]
         
         for path in possible_paths:
@@ -87,8 +86,153 @@ class ComplianceRAGEngine:
                 print(f"找到规则文件: {path}")
                 return path
         
-        # 如果都找不到，抛出详细错误
-        raise FileNotFoundError(f"未找到规则文件。检查了以下路径: {possible_paths}")
+        # 如果都找不到，在项目根目录创建规则文件
+        rules_path = os.path.join(project_root, "compliance_rules.yaml")
+        print(f"未找到规则文件，创建在项目根目录: {rules_path}")
+        self._create_default_rules(rules_path)
+        return rules_path
+
+    def _create_default_rules(self, file_path):
+        """创建默认规则文件"""
+        default_rules = {
+            "承诺收益": {
+                "保证收益": {
+                    "description": "禁止承诺或保证投资收益",
+                    "examples": [
+                        "这款产品稳赚不赔",
+                        "年化收益保底8%",
+                        "保证赚钱"
+                    ]
+                }
+            },
+            "夸大宣传": {
+                "调研夸大": {
+                    "description": "禁止对投研调研活动进行夸大宣传",
+                    "examples": [
+                        "我们拿到了一手资料",
+                        "对这家公司知根知底"
+                    ]
+                }
+            },
+            "私下联系": {
+                "个人联系方式": {
+                    "description": "禁止与客户进行私下联系",
+                    "examples": [
+                        "加你个人微信",
+                        "私下联系你"
+                    ]
+                }
+            },
+            "敏感词汇": {
+                "不当用语": {
+                    "description": "禁止使用敏感或不当词汇",
+                    "examples": [
+                        "妖股",
+                        "冲击连板",
+                        "翻倍不是梦"
+                    ]
+                }
+            },
+            "高额回报": {
+                "短期高收益": {
+                    "description": "禁止宣传短期内可获高额回报",
+                    "examples": [
+                        "10天赚10万",
+                        "马上行动赚钱"
+                    ]
+                }
+            },
+            "异常开户": {
+                "违规开户": {
+                    "description": "禁止引导异常开户行为",
+                    "examples": [
+                        "加他微信办理开户",
+                        "最低佣金开户"
+                    ]
+                }
+            },
+            "风险测评": {
+                "干扰测评": {
+                    "description": "禁止干扰客户风险测评独立性",
+                    "examples": [
+                        "你就选C",
+                        "这样能买高风险产品"
+                    ]
+                }
+            },
+            "合同表述": {
+                "错误表述": {
+                    "description": "禁止错误表述服务合同生效起始周期",
+                    "examples": [
+                        "服务期限从明天开始",
+                        "明天就能跟上操作"
+                    ]
+                }
+            },
+            "低投入高回报": {
+                "夸张收益": {
+                    "description": "禁止低投入高额回报表述",
+                    "examples": [
+                        "5万本金轻松赚8万",
+                        "收益率超100%"
+                    ]
+                }
+            },
+            "不文明用语": {
+                "侮辱性语言": {
+                    "description": "禁止使用不文明用语",
+                    "examples": [
+                        "傻逼",
+                        "真难搞"
+                    ]
+                }
+            },
+            "退款营销": {
+                "退款承诺": {
+                    "description": "禁止以退款为营销卖点",
+                    "examples": [
+                        "不满意就退",
+                        "5天内全额退款"
+                    ]
+                }
+            },
+            "他人身份": {
+                "身份冒用": {
+                    "description": "禁止怂恿客户使用他人身份办理服务",
+                    "examples": [
+                        "用你爱人身份办理",
+                        "发到这个微信就行"
+                    ]
+                }
+            },
+            "违规指导": {
+                "投资建议": {
+                    "description": "禁止提供具体的投资指导",
+                    "examples": [
+                        "明天开盘直接买入",
+                        "目标15元止盈"
+                    ]
+                }
+            },
+            "个股走势": {
+                "预测走势": {
+                    "description": "禁止对标个股未来走势做出确定性判断",
+                    "examples": [
+                        "肯定会涨",
+                        "冲击涨停没问题"
+                    ]
+                }
+            }
+        }
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # 写入文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            yaml.dump(default_rules, f, allow_unicode=True, indent=2)
+        
+        print(f"已创建默认规则文件: {file_path}")
 
     def predict(self, text: str) -> Dict[str, Any]:
         raw_response = self.chain.invoke(text).strip()
