@@ -6,4 +6,5 @@ qwen
 sentence-transformers
 faiss-cpu
 streamlit
+openai
 pydantic>=2.0
