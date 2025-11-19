@@ -1,0 +1,495 @@
+- event_name: "承诺收益表述"
+  risk_level: "高"
+  score: 10
+  description: "禁止服务人员以明确、肯定的语气向客户直接承诺投资结果或收益保障。仅当同时满足：(1) 表达主体是服务方；(2) 使用绝对化收益承诺词汇或具体金额/比例；(3) 上下文涉及投资、理财、产品、客户等金融场景。"
+  trigger:
+    keywords:
+      - '稳赚不赔'
+      - '肯定赚钱'
+      - '不会亏'
+      - '保底收益'
+      - '收益保证'
+      - '稳赚'
+      - '保证收益'
+      - '必赚'
+      - '赚\\d+元'
+      - '收益\\d+%'
+      - '回报\\d+%'
+      - '利润\\d+%'
+      - '利润\\d+元'
+      - '收益翻倍'
+      - '保本\\d+%'
+    context_words:
+      - '客户'
+      - '投资'
+      - '产品'
+      - '理财'
+      - '我们'
+      - '我'
+      - '本产品'
+      - '团队'
+  whitelist:
+    - '历史业绩不代表未来收益'
+    - '不保证收益'
+    - '无法确保收益'
+    - '稳赚不赔？那是骗人的！'
+    - '不能保证赚钱'
+  few_shot:
+    - input: "这款产品稳赚不赔，客户买了年收益能到8%！"
+      violation: true
+      reason: "服务方主动承诺，含关键词、数字收益、客户上下文"
+    - input: "XX股票可以在10元附近买入，15元止盈。"
+      violation: false
+      reason: "仅为买卖建议，规则明确排除"
+    - input: "客户问：能保证赚钱吗？客服答：不能。"
+      violation: false
+      reason: "关键词出现在客户提问中，非服务方承诺"
+    - input: "历史业绩不代表未来收益。"
+      violation: false
+      reason: "命中白名单，强豁免"
+
+- event_name: "对投研调研活动夸大宣传"
+  risk_level: "中"
+  score: 5
+  description: "员工明确强调线下调研后对标的能获取一手资料、知根知底、了如指掌；或明确强调联合其他机构调研并了解其真实持仓，且暗示股价受影响。"
+  trigger:
+    keywords:
+      - '一手资料'
+      - '知根知底'
+      - '了如指掌'
+      - '联合调研'
+      - '机构实际持仓'
+    context_words:
+      - '调研'
+      - '标的'
+      - '股票'
+      - '公司'
+  whitelist: []
+  few_shot:
+    - input: "我们这次调研拿到了一手资料，对这家公司知根知底！"
+      violation: true
+      reason: "使用'一手资料''知根知底'，构成夸大宣传"
+    - input: "本周安排了上市公司调研。"
+      violation: false
+      reason: "仅陈述事实，无夸大用语"
+
+- event_name: "与客户进行私下联系"
+  risk_level: "高"
+  score: 10
+  description: "索要客户手机号/微信，或提供个人联系方式让客户添加。通过官方链接（如 abctougu）引导填写不违规。"
+  trigger:
+    keywords:
+      - '你的手机号多少'
+      - '微信号多少'
+      - '我加你个人微信'
+      - '这是我的个人手机号'
+      - '你加我微信'
+      - 'VX多少'
+    context_words:
+      - '你'
+      - '客户'
+      - '联系'
+      - '发资料'
+  whitelist:
+    - '通过官网链接填写信息'
+    - 'abctougu.com'
+  few_shot:
+    - input: "你微信号多少？我加你个人微信发资料。"
+      violation: true
+      reason: "引导添加私人微信，违反规定"
+    - input: "请通过 abctougu.com 填写手机号获取服务。"
+      violation: false
+      reason: "使用官方链接，合规"
+
+- event_name: "使用敏感词汇"
+  risk_level: "中"
+  score: 5
+  description: "出现模型关键词库中的敏感词汇或其近似形式（如谐音、变体）。"
+  trigger:
+    keywords:
+      - '预期收益'
+      - '预期空间'
+      - '吃肉'
+      - '捡漏'
+      - '捡钱'
+      - '成功率'
+      - '收益率'
+      - '胜率'
+      - '翻身'
+      - '妖龙'
+      - '牛股'
+      - '妖股'
+      - '回血'
+      - '回本'
+      - '翻倍'
+      - '翻番'
+      - '暴涨'
+      - '连板'
+      - '天板'
+      - '涨停'
+      - '全胜'
+      - '没有亏损'
+      - '大赚小亏'
+      - '少赚就是亏'
+      - '本金无忧'
+      - '战胜'
+      - '持续盈利'
+      - '钱生钱'
+      - '边学边赚'
+      - '见效'
+      - '立竿见影'
+      - '10倍股'
+      - '抓涨停'
+      - '搏一搏'
+      - '单车变摩托'
+      - '一天一辆小汽车'
+      - '大平层'
+      - '一套房'
+      - '抢钱'
+      # ⚠️ 移除以下侮辱性词汇（应由“不文明用语”覆盖）
+      # - '傻逼'
+      # - '脑残'
+      # - 'nmsl'
+      # - 'sb'
+      # - 'tmd'
+      # - 'tm'
+      # - 'cnm'
+    context_words: []
+  whitelist: []
+  few_shot:
+    - input: "这个票有望成为10倍股！"
+      violation: true
+      reason: "包含敏感词'10倍股'"
+    - input: "市场有机会反弹。"
+      violation: false
+      reason: "'机会'为合规表述，不在敏感词库"
+
+- event_name: "短期内可获高额回报表述"
+  risk_level: "中"
+  score: 5
+  description: "服务宣传中出现任何短期内可获高额回报的表述，如'10天赚10万''账户盈利短于1个月内'。暗示性话术不违规。"
+  trigger:
+    keywords:
+      - '昨天加入明天报喜'
+      - '10天赚10万'
+      - '账户盈利短于1个月内'
+      - '加入即赚'
+      - '\\d+天赚\\d+万'
+      - '一周回本'
+    context_words:
+      - '加入'
+      - '服务'
+      - '账户'
+      - '盈利'
+  whitelist: []
+  few_shot:
+    - input: "10天赚10万不是梦！"
+      violation: true
+      reason: "短期高回报承诺"
+    - input: "周一【热点抢先机】低价解锁模型选股工具试试？"
+      violation: false
+      reason: "邀约类话术，无收益承诺"
+
+- event_name: "异常开户（FX）"
+  risk_level: "高"
+  score: 10
+  description: "提及指定券商（中信、华泰等）并搭配'最低佣金''带你开户''加他微信'等营销话术。"
+  trigger:
+    keywords:
+      - '中信证券'
+      - '华泰证券'
+      - '国泰君安'
+      - '银河证券'
+      - '海通证券'
+      - '招商证券'
+      - '广发证券'
+      - '中信建投'
+      - '最低佣金'
+      - '佣金优惠'
+      - '带你开户'
+      - '加他微信'
+    context_words: []
+  whitelist: []
+  few_shot:
+    - input: "通过华泰证券开户，最低佣金，加他微信办理。"
+      violation: true
+      reason: "指定券商+佣金优惠+导流微信"
+    - input: "我用的是中信证券。"
+      violation: false
+      reason: "仅陈述事实，无营销意图"
+
+- event_name: "干扰风险测评独立性"
+  risk_level: "高"
+  score: 10
+  description: "直接指示或代替客户选择风险测评答案，影响结果独立性。"
+  trigger:
+    keywords:
+      - '答案是'
+      - '选A'
+      - '选B'
+      - '选C'
+      - '我帮你填'
+      - '我替你填'
+      - '按我说的选'
+      - '照我说的选'
+      - '换个身份选'
+      - '帮你点'
+      - '直接帮你选'
+      - '我代你填'
+    context_words:
+      - '风险测评'
+      - '测评'
+      - '风险等级'
+      - '风险评估'
+  whitelist:
+    - '请自行填写'
+    - '建议你自己完成'
+    - '不能帮你选'
+    - '不要随便选'
+  few_shot:
+    - input: "你就选A，这样能买这个产品。"
+      violation: true
+      reason: "指导客户选择特定答案"
+    - input: "请自行完成风险测评。"
+      violation: false
+      reason: "命中白名单"
+
+- event_name: "错误表述服务合同生效起始周期"
+  risk_level: "中"
+  score: 5
+  description: "错误表述服务期限起始时间，如'服务期从明天开始'，涉及虚假承诺。"
+  trigger:
+    keywords:
+      - '服务时间下周开始'
+      - '服务期限周一计算'
+      - '服务期限明天计算'
+      - '服务期下周开始'
+      - '服务期下月开始'
+      - '服务期从下周起'
+      - '服务期限从明天开始'
+      - '服务期从周一开始'
+    context_words:
+      - '服务期限'
+      - '费用计算'
+      - '服务期'
+  whitelist: []
+  few_shot:
+    - input: "服务期限从明天开始计算。"
+      violation: true
+      reason: "错误承诺服务起始时间"
+    - input: "办好明天跟上。"
+      violation: false
+      reason: "不涉及服务期限或费用"
+
+- event_name: "低投入高额回报表述"
+  risk_level: "中"
+  score: 5
+  description: "暗示低投入高额回报，如本金与收益比例过高（超50%或翻倍）。"
+  trigger:
+    keywords:
+      - '20万本金赚20万'
+      - '10万本金赚7万'
+      - '翻倍收益'
+      - '一票赚超50%'
+      - '本金\\d+万赚\\d+万'
+    context_words:
+      - '本金'
+      - '收益'
+      - '回报'
+  whitelist: []
+  few_shot:
+    - input: "10万本金，轻松赚7万！"
+      violation: true
+      reason: "70%收益，构成高额回报暗示"
+    - input: "历史最高收益30%。"
+      violation: false
+      reason: "陈述历史，非承诺"
+
+- event_name: "不文明用语"
+  risk_level: "高"
+  score: 20
+  description: "使用侮辱、讽刺、歧视或攻击性语言，造成客户不适。"
+  trigger:
+    keywords:
+      - '傻逼'
+      - '脑残'
+      - '有病'
+      - '废物'
+      - '垃圾'
+      - '穷鬼'
+      - '智障'
+      - '滚'
+      - '妈的'
+      - '你丫'
+      - '去死'
+      - 'nmsl'
+      - 'sb'
+      - 'shabi'
+      - 'mlgb'
+      - 'tmd'
+      - 'tm'
+      - 'cnm'
+      - 'mdzz'
+      - '煞笔'
+      - '白痴'
+      - '神经病'
+    context_words: []
+  whitelist: []
+  few_shot:
+    - input: "你这种人真蠢！"
+      violation: true
+      reason: "人身攻击+第二人称"
+    - input: "这操作有点离谱。"
+      violation: false
+      reason: "无侮辱性词汇"
+    - input: "你真是个傻逼！"
+      violation: true
+      reason: "直接使用侮辱性词汇'傻逼'，违反职业规范。"
+
+- event_name: "以退款为营销卖点"
+  risk_level: "高"
+  score: 10
+  description: "以'可退款''随时退'等作为销售诱因促使客户购买。客户主动询问时中性说明不违规。"
+  trigger:
+    keywords:
+      - '随时可以退'
+      - '不满意就退'
+      - '全额退款'
+      - '5天内退'
+      - '试用期退款'
+      - '体验期退款'
+      - '可退'
+      - '退费'
+      - '退款'
+      - '终止合作'
+    context_words:
+      - '随时退'
+      - '先用后退'
+      - '不满意退'
+      - '保证退'
+  whitelist:
+    - '无法退款'
+    - '退费需审批'
+    - '不支持退款'
+    - '退款政策'
+    - '退款流程说明'
+    - '已过期不退'
+  few_shot:
+    - input: "不满意就退，5天内全额退款！"
+      violation: true
+      reason: "以退款为营销卖点"
+    - input: "退款需提交申请并审批。"
+      violation: false
+      reason: "命中白名单"
+
+- event_name: "怂恿客户使用他人身份办理服务"
+  risk_level: "高"
+  score: 10
+  description: "引导客户使用他人身份购买服务，或知晓后予以诱导。"
+  trigger:
+    keywords:
+      - '您爱人办理'
+      - '您朋友身份办理'
+      - '用别人身份证'
+      - '信息发到这个微信'
+    context_words:
+      - '办理'
+      - '身份'
+      - '微信'
+  whitelist: []
+  few_shot:
+    - input: "您朋友身份办理，到时候信息发送到这个微信。"
+      violation: true
+      reason: "明确引导使用他人身份"
+    - input: "请本人办理。"
+      violation: false
+      reason: "合规要求"
+
+- event_name: "违规指导"
+  risk_level: "高"
+  score: 10
+  description: "向客户提供非投顾观点的操作策略，且未附投资顾问执业编号。"
+  trigger:
+    keywords:
+      - '涨停直接卖'
+      - '涨到多少卖'
+      - '减仓'
+      - '半仓'
+      - '分批减仓'
+      - '低吸'
+      - '回踩'
+      - '支撑位'
+      - '压力位'
+      - '10日均线'
+      - '跟我操作'
+      - '听我指挥'
+      - '买入'
+      - '卖出'
+      - '止盈'
+      - '买票'
+      - '挂单操作'
+      - '建仓'
+      - '跟上买票'
+      - '建仓价'
+      - '可分批加仓'
+    context_words:
+      - '股票'
+      - '操作'
+      - '持仓'
+  whitelist:
+    - '投资顾问执业编号'
+    - '老师策略'
+  few_shot:
+    - input: "明天开盘直接买入，目标15元止盈。"
+      violation: true
+      reason: "提供操作指令，无执业编号"
+    - input: "根据XX老师策略（编号：S123456），建议低吸。"
+      violation: false
+      reason: "附带执业编号，合规"
+
+- event_name: "对标个股未来走势"
+  risk_level: "中"
+  score: 5
+  description: "以个股历史表现对未来涨跌做确定性判断，诱导'必涨'预期。"
+  trigger:
+    keywords:
+      - '一定会涨'
+      - '肯定涨'
+      - '大概率涨'
+      - '稳涨'
+      - '冲击连板'
+      - '有望复制'
+      - '跟上就对'
+      - '涨停'
+      - '连板'
+      - '翻倍'
+      - '暴涨'
+      - '有机会翻'
+      - '冲击涨停'
+      - '起飞'
+    context_words:
+      - '股票'
+      - '个股'
+      - '走势'
+      - '行情'
+      - '标的'
+      - '这票'
+      - '这支'
+      - '这只'
+      - '这个股'
+  whitelist:
+    - '已上涨'
+    - '过去'
+    - '历史'
+    - '之前'
+    - '曾经'
+    - '复盘'
+    - '已经'
+    - '过去走势'
+  few_shot:
+    - input: "这只票肯定会涨，跟上就对了！"
+      violation: true
+      reason: "确定性判断+个股上下文"
+    - input: "该股过去5天上涨30%。"
+      violation: false
+      reason: "陈述历史，命中白名单"
