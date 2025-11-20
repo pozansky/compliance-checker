@@ -73,7 +73,6 @@ class ComplianceRAGEngine:
 """)
         
         self.chain = (
-            {"rules": self.retriever, "input": RunnablePassthrough()}
             | prompt
             | self.llm
             | StrOutputParser()
