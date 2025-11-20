@@ -10,25 +10,29 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, Any
 
+# 设置 DashScope API Key
+os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
+
 class EnhancedComplianceRAGEngine:
     def __init__(self, rules_file: str = None):
         from .rule_loader import load_all_rules
         from .document_builder import build_rule_documents
         
+        # 自动查找或创建规则文件
         if rules_file is None:
             rules_file = self._find_or_create_rules_file()
         
         print(f"使用规则文件: {rules_file}")
-        self.rules = load_all_rules(rules_file)
-        documents = build_rule_documents(self.rules)
+        rules = load_all_rules(rules_file)
+        documents = build_rule_documents(rules)
         
-        # 使用更强大的本地嵌入模型
+        # 使用 HuggingFace 本地嵌入模型
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         )
         
         self.vectorstore = FAISS.from_documents(documents, embeddings)
-        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 5})
+        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
         
         # 使用 DashScope 的 Qwen 模型
         self.llm = ChatOpenAI(
@@ -39,29 +43,28 @@ class EnhancedComplianceRAGEngine:
             max_tokens=800,
         )
         
-        # 改进的 Prompt，包含更多上下文和判断逻辑
+        # 改进的 Prompt - 基于您的误判分析优化
         prompt = ChatPromptTemplate.from_template("""
-你是一名专业的金融合规审核专家。请严格根据以下规则判断用户聊天内容是否违规，特别注意语境和意图。
+你是一名金融合规审核员。请严格根据以下规则判断用户聊天内容是否违规，特别注意避免误判。
 
-相关合规规则：
+相关规则：
 {rules}
 
 当前分析的聊天内容：
 {input}
 
-请仔细分析以下关键点：
-1. 说话主体是谁？是服务方主动承诺还是客户询问？
-2. 是确定性承诺还是历史业绩展示？
-3. 是否包含明确的收益保证词汇？
-4. 上下文是营销诱导还是事实陈述？
-5. 是否命中白名单豁免情况？
+重要判断原则（基于历史误判分析）：
+1. 【历史业绩展示】如果内容是展示历史业绩（如"之前亏损，现在赚X万"）且包含风险提示，通常不违规
+2. 【客户案例分享】如果是客户真实案例分享而非服务方主动承诺，通常不违规  
+3. 【服务邀约】如果只是服务邀约（如"加入实战班"）而无收益承诺，通常不违规
+4. 【官方渠道】提到微信但属于官方服务渠道而非个人微信，不违规
+5. 【风险提示】包含"投资有风险"、"不代表未来收益"等提示，倾向于不违规
 
 你必须且只能按以下格式输出：
 
 是否违规：是/否
 触发事件：[事件名称，若不违规则写"无"]
-理由：[详细分析理由，说明为什么符合或不符合规则定义]
-置信度：[高/中/低]
+理由：[简明理由，重点说明是否符合上述判断原则]
 """)
         
         self.chain = (
@@ -81,156 +84,263 @@ class EnhancedComplianceRAGEngine:
             return rules_path
         
         print(f"未找到规则文件，创建在src目录: {rules_path}")
-        self._create_enhanced_rules(rules_path)
+        self._create_optimized_rules(rules_path)
         return rules_path
 
-    def _create_enhanced_rules(self, file_path):
-        """创建增强版规则文件，基于您的标注反馈优化"""
-        enhanced_rules = {
-            "承诺收益表述": {
-                "description": "禁止服务人员以明确、肯定的语气向客户直接承诺投资结果或收益保障。关键区分：主动承诺 vs 历史业绩展示",
-                "strict_conditions": [
-                    "服务方主动做出收益保证",
-                    "使用绝对化词汇（稳赚不赔、保证收益等）", 
-                    "包含具体收益数字或比例",
-                    "在营销语境中而非客户询问中"
-                ],
-                "exempt_conditions": [
-                    "客户主动询问时的中性回答",
-                    "明确标注'历史业绩不代表未来收益'",
-                    "风险提示完整的业绩展示",
-                    "使用'可能'、'有望'等非确定性词汇"
-                ],
-                "examples": {
-                    "违规": [
-                        "这款产品稳赚不赔，年收益能到8%！",
-                        "加入我们保证赚钱"
+    def _create_optimized_rules(self, file_path):
+        """创建基于误判分析优化的规则文件"""
+        optimized_rules = [
+            {
+                "event_name": "承诺收益表述",
+                "risk_level": "高",
+                "score": 10,
+                "description": "禁止服务人员以明确、肯定的语气向客户直接承诺投资结果或收益保障。特别注意：历史业绩展示、客户案例分享、风险提示完整的情况通常不违规。",
+                "trigger": {
+                    "keywords": [
+                        '稳赚不赔', '肯定赚钱', '不会亏', '保底收益', '收益保证', 
+                        '稳赚', '保证收益', '必赚', '收益翻倍'
                     ],
-                    "合规": [
-                        "历史数据显示最高收益30%，但不代表未来表现",
-                        "客户问：能保证赚钱吗？客服答：不能保证",
-                        "王大哥之前亏损，接触老师后3月赚17万（历史业绩展示）"
+                    "context_words": [
+                        '客户', '投资', '产品', '理财', '我们', '我', '本产品', '团队'
                     ]
-                }
-            },
-            "低投入高额回报表述": {
-                "description": "禁止暗示低投入高额回报，如本金与收益比例过高（超50%或翻倍）。关键区分：具体比例承诺 vs 业绩案例展示",
-                "strict_conditions": [
-                    "明确的本金收益比例表述",
-                    "使用'轻松赚'、'简单获取'等暗示性词汇",
-                    "在营销话术中作为卖点"
+                },
+                "whitelist": [
+                    '历史业绩不代表未来收益', '不保证收益', '无法确保收益', 
+                    '稳赚不赔？那是骗人的！', '不能保证赚钱', '投资有风险',
+                    '仅供参考', '风险自担'
                 ],
-                "exempt_conditions": [
-                    "客户真实业绩案例分享",
-                    "包含完整风险提示",
-                    "不作为主要营销卖点"
+                "few_shot": [
+                    {
+                        "input": "这款产品稳赚不赔，客户买了年收益能到8%！",
+                        "violation": True,
+                        "reason": "服务方主动承诺收益，使用绝对化词汇"
+                    },
+                    {
+                        "input": "王大哥之前亏损，接触老师后3月赚17万了",
+                        "violation": False, 
+                        "reason": "历史业绩展示，非服务方主动承诺"
+                    },
+                    {
+                        "input": "客户问：能保证赚钱吗？客服答：不能。",
+                        "violation": False,
+                        "reason": "客户询问，客服明确表示不能保证"
+                    }
                 ]
             },
-            "与客户进行私下联系": {
-                "description": "禁止索要或提供个人联系方式。关键区分：个人微信 vs 官方服务微信",
-                "strict_conditions": [
-                    "明确要求添加个人微信",
-                    "提供个人手机号",
-                    "引导到非官方渠道"
+            {
+                "event_name": "低投入高额回报表述", 
+                "risk_level": "中",
+                "score": 5,
+                "description": "禁止暗示低投入高额回报。特别注意：客户真实案例分享、历史业绩展示且风险提示完整的情况通常不违规。",
+                "trigger": {
+                    "keywords": [
+                        '20万本金赚20万', '10万本金赚7万', '翻倍收益',
+                        '一票赚超50%', '本金\\d+万赚\\d+万'
+                    ],
+                    "context_words": [
+                        '本金', '收益', '回报'
+                    ]
+                },
+                "whitelist": [
+                    '历史最高收益', '过去表现', '客户自愿报喜'
                 ],
-                "exempt_conditions": [
-                    "官方微信服务号推送",
-                    "公司统一的服务联系方式",
-                    "策略通过官方微信推送"
+                "few_shot": [
+                    {
+                        "input": "10万本金，轻松赚7万！",
+                        "violation": True,
+                        "reason": "暗示低投入高回报，构成营销诱导"
+                    },
+                    {
+                        "input": "学员张大哥10万本金赚了7万，投资有风险",
+                        "violation": False,
+                        "reason": "客户真实案例分享，包含风险提示"
+                    }
                 ]
             },
-            # 其他规则类似优化...
-        }
+            {
+                "event_name": "与客户进行私下联系",
+                "risk_level": "高", 
+                "score": 10,
+                "description": "禁止索要客户手机号/微信，或提供个人联系方式让客户添加。通过官方链接、官方微信服务号引导不违规。",
+                "trigger": {
+                    "keywords": [
+                        '你的手机号多少', '微信号多少', '我加你个人微信',
+                        '这是我的个人手机号', '你加我微信', 'VX多少'
+                    ],
+                    "context_words": [
+                        '你', '客户', '联系', '发资料'
+                    ]
+                },
+                "whitelist": [
+                    '通过官网链接填写信息', 'abctougu.com', '官方微信服务号',
+                    '公众号查看', '企业微信'
+                ],
+                "few_shot": [
+                    {
+                        "input": "你微信号多少？我加你个人微信发资料。",
+                        "violation": True,
+                        "reason": "引导添加私人微信，违反规定"
+                    },
+                    {
+                        "input": "策略会通过官方微信服务号推送",
+                        "violation": False,
+                        "reason": "使用官方渠道，合规"
+                    }
+                ]
+            },
+            {
+                "event_name": "短期内可获高额回报表述",
+                "risk_level": "中",
+                "score": 5, 
+                "description": "禁止宣传短期内可获高额回报。特别注意：历史客户案例的时间描述通常不违规。",
+                "trigger": {
+                    "keywords": [
+                        '昨天加入明天报喜', '10天赚10万', '账户盈利短于1个月内',
+                        '加入即赚', '\\d+天赚\\d+万', '一周回本'
+                    ],
+                    "context_words": [
+                        '加入', '服务', '账户', '盈利'
+                    ]
+                },
+                "whitelist": [
+                    '历史客户案例', '过去表现'
+                ],
+                "few_shot": [
+                    {
+                        "input": "10天赚10万不是梦！",
+                        "violation": True,
+                        "reason": "短期高回报承诺"
+                    },
+                    {
+                        "input": "学员李姐加入后10天赚了10万",
+                        "violation": False,
+                        "reason": "历史客户案例展示"
+                    }
+                ]
+            },
+            {
+                "event_name": "对标个股未来走势",
+                "risk_level": "中",
+                "score": 5,
+                "description": "禁止以个股历史表现对未来涨跌做确定性判断。市场分析、行情展望通常不违规。",
+                "trigger": {
+                    "keywords": [
+                        '一定会涨', '肯定涨', '大概率涨', '稳涨', '冲击连板',
+                        '有望复制', '跟上就对', '起飞'
+                    ],
+                    "context_words": [
+                        '股票', '个股', '走势', '行情', '标的'
+                    ]
+                },
+                "whitelist": [
+                    '已上涨', '过去', '历史', '市场有机会', '可能', '有望'
+                ],
+                "few_shot": [
+                    {
+                        "input": "这只票肯定会涨，跟上就对了！",
+                        "violation": True,
+                        "reason": "确定性判断+个股上下文"
+                    },
+                    {
+                        "input": "市场有机会反弹，可以关注相关板块",
+                        "violation": False,
+                        "reason": "市场分析，非个股确定性判断"
+                    }
+                ]
+            }
+        ]
         
+        # 写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
-            yaml.dump(enhanced_rules, f, allow_unicode=True, indent=2)
+            yaml.dump(optimized_rules, f, allow_unicode=True, indent=2)
         
-        print(f"已创建增强规则文件: {file_path}")
+        print(f"已创建优化规则文件: {file_path}")
 
-    def _context_analysis(self, text: str) -> Dict[str, Any]:
-        """上下文分析，减少误判"""
-        analysis = {
-            "is_service_party": False,
-            "is_marketing_context": False, 
-            "contains_historical_performance": False,
-            "contains_risk_disclaimer": False,
-            "is_customer_inquiry": False
-        }
+    def _pre_check_common_false_positive(self, text: str) -> Dict[str, Any]:
+        """预检查常见误判模式"""
+        # 历史业绩模式（通常合规）
+        historical_patterns = [
+            r'之前.*亏损.*接触.*赚\d+万',
+            r'历史.*业绩.*展示',
+            r'客户.*报喜.*赚\d+',
+            r'学员.*加入.*赚\d+'
+        ]
         
-        # 服务方标识
-        service_indicators = ['老师', '团队', '我们', '实战班', '服务', '加入']
-        if any(indicator in text for indicator in service_indicators):
-            analysis["is_service_party"] = True
-            
-        # 营销语境
-        marketing_indicators = ['跟上', '加入', '办理', '优惠', '名额', '报名']
-        if any(indicator in text for indicator in marketing_indicators):
-            analysis["is_marketing_context"] = True
-            
-        # 历史业绩展示
-        historical_indicators = ['之前', '历史', '上月', '上周', '已经赚', '报喜']
-        risk_indicators = ['投资有风险', '不代表未来', '风险自担', '入市需谨慎']
+        # 风险提示模式（通常合规）  
+        risk_patterns = [
+            r'投资有风险',
+            r'入市需谨慎', 
+            r'不代表未来收益',
+            r'风险自担',
+            r'仅供参考'
+        ]
         
-        if any(indicator in text for indicator in historical_indicators):
-            analysis["contains_historical_performance"] = True
-        if any(indicator in text for indicator in risk_indicators):
-            analysis["contains_risk_disclaimer"] = True
-            
-        # 客户询问
-        inquiry_indicators = ['能保证吗', '可以赚钱吗', '会不会亏']
-        if any(indicator in text for indicator in inquiry_indicators):
-            analysis["is_customer_inquiry"] = True
-            
-        return analysis
-
-    def predict(self, text: str) -> Dict[str, Any]:
-        """改进的预测方法，结合规则和上下文分析"""
+        # 官方渠道模式（通常合规）
+        official_patterns = [
+            r'官方微信',
+            r'服务号',
+            r'公众号',
+            r'abctougu\.com'
+        ]
         
-        # 首先进行上下文分析
-        context = self._context_analysis(text)
+        # 检查是否匹配历史业绩且包含风险提示
+        is_historical = any(re.search(pattern, text) for pattern in historical_patterns)
+        has_risk_warning = any(re.search(pattern, text) for pattern in risk_patterns)
+        is_official_channel = any(re.search(pattern, text) for pattern in official_patterns)
         
-        # 特殊处理：历史业绩展示 + 风险提示 → 通常合规
-        if (context["contains_historical_performance"] and 
-            context["contains_risk_disclaimer"] and
-            not any(word in text for word in ['保证', '稳赚', '必赚', '肯定'])):
+        # 如果是历史业绩展示且包含风险提示，倾向于不违规
+        if is_historical and has_risk_warning:
             return {
-                "raw_response": "上下文分析：历史业绩展示含风险提示",
-                "violation": False,
-                "triggered_event": "无",
-                "reason": "历史业绩展示包含完整风险提示，符合合规要求",
-                "confidence": "高"
+                "likely_compliant": True,
+                "reason": "历史业绩展示包含风险提示",
+                "confidence": "high"
+            }
+        
+        # 如果是官方渠道提及，倾向于不违规
+        if is_official_channel:
+            return {
+                "likely_compliant": True, 
+                "reason": "官方渠道使用",
+                "confidence": "medium"
             }
             
-        # 特殊处理：客户询问的回应 → 通常合规  
-        if context["is_customer_inquiry"] and not context["is_service_party"]:
+        return {
+            "likely_compliant": False,
+            "reason": "需要进一步分析",
+            "confidence": "low"
+        }
+
+    def predict(self, text: str) -> Dict[str, Any]:
+        """改进的预测方法，减少误判"""
+        
+        # 先进行预检查
+        pre_check = self._pre_check_common_false_positive(text)
+        if pre_check["likely_compliant"] and pre_check["confidence"] == "high":
             return {
-                "raw_response": "上下文分析：客户询问回应",
-                "violation": False, 
+                "raw_response": f"预检查通过: {pre_check['reason']}",
+                "violation": False,
                 "triggered_event": "无",
-                "reason": "针对客户询问的回应，非主动承诺",
-                "confidence": "高"
+                "reason": pre_check["reason"],
+                "pre_check_used": True
             }
         
         # 调用LLM进行详细分析
         raw_response = self.chain.invoke(text).strip()
 
-        # 解析响应
         violation = False
         triggered_event = "无"
         reason = "未能解析模型响应"
-        confidence = "中"
 
         try:
             lines = raw_response.split('\n')
             for line in lines:
-                if '是否违规：' in line:
-                    violation = '是' in line.split('：')[1]
-                elif '触发事件：' in line:
-                    triggered_event = line.split('：')[1].strip()
-                elif '理由：' in line:
-                    reason = line.split('：')[1].strip()
-                elif '置信度：' in line:
-                    confidence = line.split('：')[1].strip()
+                line = line.strip()
+                if line.startswith('是否违规：'):
+                    violation = '是' in line
+                elif line.startswith('触发事件：'):
+                    triggered_event = line.replace('触发事件：', '').strip()
+                elif line.startswith('理由：'):
+                    reason = line.replace('理由：', '').strip()
         except Exception as e:
             reason = f"解析错误: {str(e)}"
 
@@ -239,22 +349,43 @@ class EnhancedComplianceRAGEngine:
             "violation": violation,
             "triggered_event": triggered_event,
             "reason": reason,
-            "confidence": confidence,
-            "context_analysis": context
+            "pre_check_used": False
         }
 
-# 使用示例
-if __name__ == "__main__":
+# 测试函数
+def test_common_cases():
+    """测试常见误判案例"""
     engine = EnhancedComplianceRAGEngine()
     
-    # 测试误判案例
     test_cases = [
+        # 历史业绩展示 - 应该不违规
         "王大哥之前自己做的时候，一个月亏损10万+，2月这么好的行情只赚了3万块钱，接触曾老师后，相信曾老师能力 2月28日果断跟上曾老师实战班，#3月已经赚17万了",
+        
+        # 服务邀约 - 应该不违规  
         "在吗？今日福利股请查收?首席福利内参好票额外申请，是您购买服务以外的额外福利",
-        "对你好的事情小王一直在做的，感受到老师的实力了吧[红包]你看3月13日单独提醒您的【300430诚益通】今天再次大涨10%"
+        
+        # 官方微信 - 应该不违规
+        "大盘如期反弹，昨晚提醒今天反弹，#你手中有被套十个点的股嘛？有的话把代码发到我微信上，我找老师帮您看看，需不需对冲解套",
+        
+        # 明确违规案例
+        "这款产品稳赚不赔，保证年收益8%！",
+        
+        # 客户询问回应 - 应该不违规
+        "客户问：能保证赚钱吗？客服答：不能保证，投资有风险",
     ]
     
-    for case in test_cases:
+    print("测试常见案例:")
+    print("=" * 50)
+    
+    for i, case in enumerate(test_cases, 1):
         result = engine.predict(case)
-        print(f"测试: {case[:50]}...")
-        print(f"结果: {result}\n")
+        print(f"\n案例 {i}: {case[:50]}...")
+        print(f"违规: {result['violation']}")
+        print(f"事件: {result['triggered_event']}")
+        print(f"理由: {result['reason']}")
+        if result.get('pre_check_used'):
+            print("✅ 使用了预检查")
+        print("-" * 30)
+
+if __name__ == "__main__":
+    test_common_cases()
