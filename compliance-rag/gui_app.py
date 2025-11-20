@@ -1,7 +1,7 @@
 # web_app.py
 import streamlit as st
 import pandas as pd
-from src.rag_engine import ComplianceRAGEngine
+from rag_engine import ComplianceRAGEngine
 import tempfile
 import os
 import sys
