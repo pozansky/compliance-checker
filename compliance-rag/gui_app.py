@@ -23,7 +23,7 @@ def load_engine():
     try:
         # 设置 DashScope API Key
         os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
-        engine = EnhancedComplianceRAGEngine()
+        engine = ComplianceRAGEngine()
         return engine
     except Exception as e:
         st.error(f"引擎初始化失败: {str(e)}")
