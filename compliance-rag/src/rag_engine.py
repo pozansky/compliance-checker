@@ -104,7 +104,7 @@ class ComplianceRAGEngine:
         
         # 如果找不到，在当前src目录创建规则文件
         print(f"未找到规则文件，创建在src目录: {rules_path}")
-        self._create_default_rules(rules_path)
+        # self._create_default_rules(rules_path)
         return rules_path
 
     def _create_default_rules(self, file_path):
