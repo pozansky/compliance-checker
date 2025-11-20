@@ -73,7 +73,7 @@ class ComplianceRAGEngine:
 """)
         
         self.chain = (
-            | prompt
+            prompt
             | self.llm
             | StrOutputParser()
         )
