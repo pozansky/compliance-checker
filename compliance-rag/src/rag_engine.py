@@ -67,28 +67,19 @@ class ComplianceRAGEngine:
         )
 
     def _find_or_create_rules_file(self):
-        """查找或创建规则文件（在项目根目录）"""
-        # 获取项目根目录
-        # 方法1：从当前文件向上两级到项目根目录
+        """查找或创建规则文件"""
+        # 获取当前文件所在目录（src目录）
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)  # 向上到项目根目录
         
-        # 可能的规则文件路径（优先项目根目录）
-        possible_paths = [
-            os.path.join(project_root, "compliance_rules.yaml"),  # 项目根目录
-            "compliance_rules.yaml",                              # 当前工作目录
-            "./compliance_rules.yaml",                            # 当前工作目录
-            os.path.join(current_dir, "compliance_rules.yaml"),   # src目录（备选）
-        ]
+        # 规则文件就在当前src目录下
+        rules_path = os.path.join(current_dir, "compliance_rules.yaml")
         
-        for path in possible_paths:
-            if os.path.exists(path):
-                print(f"找到规则文件: {path}")
-                return path
+        if os.path.exists(rules_path):
+            print(f"找到规则文件: {rules_path}")
+            return rules_path
         
-        # 如果都找不到，在项目根目录创建规则文件
-        rules_path = os.path.join(project_root, "compliance_rules.yaml")
-        print(f"未找到规则文件，创建在项目根目录: {rules_path}")
+        # 如果找不到，在当前src目录创建规则文件
+        print(f"未找到规则文件，创建在src目录: {rules_path}")
         self._create_default_rules(rules_path)
         return rules_path
 
@@ -224,9 +215,6 @@ class ComplianceRAGEngine:
                 }
             }
         }
-        
-        # 确保目录存在
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         
         # 写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
