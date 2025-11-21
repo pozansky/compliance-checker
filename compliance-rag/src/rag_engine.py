@@ -1,6 +1,6 @@
+# src/rag_engine.py
 import os
 import yaml
-import re
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
@@ -10,31 +10,18 @@ from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, Any
 
 # 设置 DashScope API Key
-os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
+os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
 
 class ComplianceRAGEngine:
-    def __init__(self, rules_file: str = "compliance-checker/compliance_rules.yaml"):
-        # 如果是相对路径，尝试相对于当前脚本位置解析
-        if not os.path.isabs(rules_file):
-            # 假设规则文件在当前脚本所在目录下的 compliance_rag 文件夹中
-            script_dir = Path(__file__).parent
-            rules_file = script_dir / rules_file
-    
-        rules_file = str(rules_file)  # 转为字符串供 os.path 使用
-    
+    def __init__(self, rules_file: str = None):
+        from .rule_loader import load_all_rules
+        from .document_builder import build_rule_documents
+        
+        # 自动查找或创建规则文件
+        if rules_file is None:
+            rules_file = self._find_or_create_rules_file()
+        
         print(f"使用规则文件: {rules_file}")
-        
-        if not os.path.exists(rules_file):
-            raise FileNotFoundError(f"规则文件未找到: {rules_file}。请确保文件存在且路径正确。")
-            
-        # 动态导入
-        try:
-            from rule_loader import load_all_rules
-            from document_builder import build_rule_documents
-        except ImportError as e:
-            raise ImportError(f"导入依赖模块失败: {e}")
-        
-        # 加载规则和文档
         rules = load_all_rules(rules_file)
         documents = build_rule_documents(rules)
         
@@ -55,26 +42,12 @@ class ComplianceRAGEngine:
             max_tokens=500,
         )
         
-        # 改进的 Prompt，增加业务上下文理解
+        # 定义带结构化输出的 Prompt
         prompt = ChatPromptTemplate.from_template("""
-你是一名金融合规审核员。请严格根据以下规则判断用户聊天内容是否违规，同时要考虑金融业务的实际场景。
+你是一名金融合规审核员。请严格根据以下规则判断用户聊天内容是否违规。
 
 相关规则：
 {rules}
-
-**重要业务上下文说明：**
-1. 使用企业微信进行服务通知是允许的正常业务流程
-2. 回顾历史个股表现和绩效展示是允许的，只要不是对未来收益的承诺
-3. 产品介绍和邀约是正常营销行为，只要不涉及具体投资指导
-4. 使用"有望"、"可能"等非确定性词汇描述潜力是允许的
-5. 服务提醒和内容推送是正常客户服务
-
-**需要特别注意的违规行为：**
-- 明确承诺或保证收益
-- 提供具体的买卖点指导
-- 引导使用私人联系方式（非企微）
-- 使用绝对化词汇如"肯定"、"必然"、"稳赚"
-- 怂恿使用他人身份办理业务
 
 聊天内容：
 {input}
@@ -83,7 +56,7 @@ class ComplianceRAGEngine:
 
 是否违规：是/否
 触发事件：[事件名称，若不违规则写"无"]
-理由：[简明理由，引用规则中的关键词或逻辑，区分正常业务行为和违规行为]
+理由：[简明理由，引用规则中的关键词或逻辑]
 """)
         
         self.chain = (
@@ -93,27 +66,164 @@ class ComplianceRAGEngine:
             | StrOutputParser()
         )
 
-    def _preprocess_text(self, text: str) -> str:
-        """预处理文本，识别正常业务模式"""
-        # 识别企微服务模式
-        if any(pattern in text for pattern in ['企业微信', '企微', '服务号', 'APP']):
-            text += " [此内容涉及企业微信服务流程]"
+    def _find_or_create_rules_file(self):
+        """查找或创建规则文件"""
+        # 获取当前文件所在目录（src目录）
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # 识别历史业绩回顾
-        if any(pattern in text for pattern in ['回顾', '上周', '上月', '历史', '过去', '此前']):
-            text += " [此内容为历史业绩回顾]"
+        # 规则文件就在当前src目录下
+        rules_path = os.path.join(current_dir, "compliance_rules.yaml")
         
-        # 识别产品邀约模式
-        if any(pattern in text for pattern in ['邀请', '邀约', '查看', '关注', '回复']):
-            text += " [此内容为正常产品邀约]"
-            
-        return text
+        if os.path.exists(rules_path):
+            print(f"找到规则文件: {rules_path}")
+            return rules_path
+        
+        # 如果找不到，在当前src目录创建规则文件
+        print(f"未找到规则文件，创建在src目录: {rules_path}")
+        self._create_default_rules(rules_path)
+        return rules_path
+
+    def _create_default_rules(self, file_path):
+        """创建默认规则文件"""
+        default_rules = {
+            "承诺收益": {
+                "保证收益": {
+                    "description": "禁止承诺或保证投资收益",
+                    "examples": [
+                        "这款产品稳赚不赔",
+                        "年化收益保底8%",
+                        "保证赚钱"
+                    ]
+                }
+            },
+            "夸大宣传": {
+                "调研夸大": {
+                    "description": "禁止对投研调研活动进行夸大宣传",
+                    "examples": [
+                        "我们拿到了一手资料",
+                        "对这家公司知根知底"
+                    ]
+                }
+            },
+            "私下联系": {
+                "个人联系方式": {
+                    "description": "禁止与客户进行私下联系",
+                    "examples": [
+                        "加你个人微信",
+                        "私下联系你"
+                    ]
+                }
+            },
+            "敏感词汇": {
+                "不当用语": {
+                    "description": "禁止使用敏感或不当词汇",
+                    "examples": [
+                        "妖股",
+                        "冲击连板",
+                        "翻倍不是梦"
+                    ]
+                }
+            },
+            "高额回报": {
+                "短期高收益": {
+                    "description": "禁止宣传短期内可获高额回报",
+                    "examples": [
+                        "10天赚10万",
+                        "马上行动赚钱"
+                    ]
+                }
+            },
+            "异常开户": {
+                "违规开户": {
+                    "description": "禁止引导异常开户行为",
+                    "examples": [
+                        "加他微信办理开户",
+                        "最低佣金开户"
+                    ]
+                }
+            },
+            "风险测评": {
+                "干扰测评": {
+                    "description": "禁止干扰客户风险测评独立性",
+                    "examples": [
+                        "你就选C",
+                        "这样能买高风险产品"
+                    ]
+                }
+            },
+            "合同表述": {
+                "错误表述": {
+                    "description": "禁止错误表述服务合同生效起始周期",
+                    "examples": [
+                        "服务期限从明天开始",
+                        "明天就能跟上操作"
+                    ]
+                }
+            },
+            "低投入高回报": {
+                "夸张收益": {
+                    "description": "禁止低投入高额回报表述",
+                    "examples": [
+                        "5万本金轻松赚8万",
+                        "收益率超100%"
+                    ]
+                }
+            },
+            "不文明用语": {
+                "侮辱性语言": {
+                    "description": "禁止使用不文明用语",
+                    "examples": [
+                        "傻逼",
+                        "真难搞"
+                    ]
+                }
+            },
+            "退款营销": {
+                "退款承诺": {
+                    "description": "禁止以退款为营销卖点",
+                    "examples": [
+                        "不满意就退",
+                        "5天内全额退款"
+                    ]
+                }
+            },
+            "他人身份": {
+                "身份冒用": {
+                    "description": "禁止怂恿客户使用他人身份办理服务",
+                    "examples": [
+                        "用你爱人身份办理",
+                        "发到这个微信就行"
+                    ]
+                }
+            },
+            "违规指导": {
+                "投资建议": {
+                    "description": "禁止提供具体的投资指导",
+                    "examples": [
+                        "明天开盘直接买入",
+                        "目标15元止盈"
+                    ]
+                }
+            },
+            "个股走势": {
+                "预测走势": {
+                    "description": "禁止对标个股未来走势做出确定性判断",
+                    "examples": [
+                        "肯定会涨",
+                        "冲击涨停没问题"
+                    ]
+                }
+            }
+        }
+        
+        # 写入文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            yaml.dump(default_rules, f, allow_unicode=True, indent=2)
+        
+        print(f"已创建默认规则文件: {file_path}")
 
     def predict(self, text: str) -> Dict[str, Any]:
-        # 预处理文本，增加业务上下文信息
-        processed_text = self._preprocess_text(text)
-        
-        raw_response = self.chain.invoke(processed_text).strip()
+        raw_response = self.chain.invoke(text).strip()
 
         violation = False
         triggered_event = "无"
@@ -138,21 +248,3 @@ class ComplianceRAGEngine:
             "triggered_event": triggered_event,
             "reason": reason
         }
-
-# 使用示例
-if __name__ == "__main__":
-    # 测试引擎
-    try:
-        # 可以在这里指定不同的路径进行测试
-        engine = ComplianceRAGEngine()
-        print("合规引擎初始化成功！")
-        
-        # 测试预测
-        test_text = "加我私人微信，告诉你明天必涨的股票"
-        result = engine.predict(test_text)
-        print(f"测试结果: {result}")
-        
-    except Exception as e:
-        print(f"初始化失败: {e}")
-        import traceback
-        traceback.print_exc()
