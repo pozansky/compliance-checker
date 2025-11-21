@@ -1,4 +1,4 @@
-# web_app.py
+# web_app.pyhttps://github.com/pozansky/compliance-checker/tree/main/compliance-rag
 import streamlit as st
 import pandas as pd
 from src.rag_engine import ComplianceRAGEngine
@@ -22,7 +22,9 @@ st.set_page_config(
 def load_engine():
     try:
         # 设置 DashScope API Key
-        os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
+        # os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
+        os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
+
         engine = ComplianceRAGEngine()
         return engine
     except Exception as e:
