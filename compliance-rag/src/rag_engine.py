@@ -17,7 +17,7 @@ class ComplianceRAGEngine:
         # 如果未提供规则文件路径，使用硬编码的绝对路径
         if rules_file is None:
             # 使用项目中的实际路径
-            rules_file = "/mount/src/compliance-checker/compliance_rules.yaml"
+            rules_file = "/mount/compliance-checker/src/compliance_rules.yaml"
         
         print(f"使用规则文件: {rules_file}")
         
