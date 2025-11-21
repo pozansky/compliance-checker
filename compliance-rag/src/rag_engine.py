@@ -19,7 +19,7 @@ class ComplianceRAGEngine:
             # 获取当前文件的绝对路径
             current_dir = os.path.dirname(os.path.abspath(__file__))
             # 直接指定规则文件在 src 目录下
-            rules_file = os.path.join(current_dir, "compliance_rules.yaml")
+            rules_file = "compliance-checker/src/compliance_rules.yaml"
             
             # 如果不存在就创建
             if not os.path.exists(rules_file):
