@@ -10,8 +10,8 @@ from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, Any
 
 # 设置 DashScope API Key
-os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
-
+# os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
+os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 class ComplianceRAGEngine:
     def __init__(self, rules_file: str = None):
         from .rule_loader import load_all_rules
