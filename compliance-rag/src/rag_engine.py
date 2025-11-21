@@ -13,16 +13,19 @@ from typing import Dict, Any
 os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 
 class ComplianceRAGEngine:
-    def __init__(self, rules_file: str = None):
-        if rules_file is None:
-            rules_file = os.getenv("COMPLIANCE_RULES_PATH", "compliance_rag/compliance_rules.yaml")
-        
-        # 转为绝对路径（如果相对）
+    def __init__(self, rules_file: str = "compliance-checker/compliance_rules.yaml"):
+        # 如果是相对路径，尝试相对于当前脚本位置解析
         if not os.path.isabs(rules_file):
-            rules_file = os.path.join(os.path.dirname(__file__), rules_file)
-        
-        rules_file = os.path.abspath(rules_file)
+            # 假设规则文件在当前脚本所在目录下的 compliance_rag 文件夹中
+            script_dir = Path(__file__).parent
+            rules_file = script_dir / rules_file
+    
+        rules_file = str(rules_file)  # 转为字符串供 os.path 使用
+    
         print(f"使用规则文件: {rules_file}")
+        
+        if not os.path.exists(rules_file):
+            raise FileNotFoundError(f"规则文件未找到: {rules_file}。请确保文件存在且路径正确。")
             
         # 动态导入
         try:
