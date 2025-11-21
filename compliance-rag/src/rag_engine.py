@@ -13,7 +13,7 @@ from typing import Dict, Any
 os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 
 class ComplianceRAGEngine:
-    def __init__(self, rules_file: "compliance_rules/compliance_rules.yaml"):
+    def __init__(self, rules_file: "compliance_rag/compliance_rules.yaml"):
         # 如果未提供规则文件路径，使用硬编码的绝对路径
         if rules_file is None:
             # 使用项目中的实际路径
