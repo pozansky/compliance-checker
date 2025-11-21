@@ -14,13 +14,25 @@ os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 
 class ComplianceRAGEngine:
     def __init__(self, rules_file: str = None):
-        # 首先查找或创建规则文件
+        # 使用绝对路径
         if rules_file is None:
-            rules_file = self._find_or_create_rules_file()
+            # 获取当前文件的绝对路径
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # 直接指定规则文件在 src 目录下
+            rules_file = os.path.join(current_dir, "compliance_rules.yaml")
+            
+            # 如果不存在就创建
+            if not os.path.exists(rules_file):
+                print(f"规则文件不存在，创建: {rules_file}")
+                self._create_default_rules(rules_file)
         
         print(f"使用规则文件: {rules_file}")
         
-        # 动态导入，避免在初始化前就引用
+        # 确保文件存在
+        if not os.path.exists(rules_file):
+            raise FileNotFoundError(f"规则文件不存在: {rules_file}")
+        
+        # 动态导入
         from rule_loader import load_all_rules
         from document_builder import build_rule_documents
         
@@ -82,62 +94,8 @@ class ComplianceRAGEngine:
             | StrOutputParser()
         )
 
-    def _find_or_create_rules_file(self):
-        """查找或创建规则文件"""
-        # 方法1：先尝试当前工作目录
-        current_working_dir = os.getcwd()
-        rules_path_cwd = os.path.join(current_working_dir, "compliance_rules.yaml")
-        
-        if os.path.exists(rules_path_cwd):
-            print(f"找到规则文件（工作目录）: {rules_path_cwd}")
-            return rules_path_cwd
-        
-        # 方法2：尝试当前文件所在目录
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        rules_path_src = os.path.join(current_dir, "compliance_rules.yaml")
-        
-        if os.path.exists(rules_path_src):
-            print(f"找到规则文件（源码目录）: {rules_path_src}")
-            return rules_path_src
-        
-        # 方法3：尝试在项目根目录查找
-        project_root = self._find_project_root()
-        if project_root:
-            rules_path_root = os.path.join(project_root, "compliance_rules.yaml")
-            if os.path.exists(rules_path_root):
-                print(f"找到规则文件（项目根目录）: {rules_path_root}")
-                return rules_path_root
-        
-        # 如果都找不到，创建默认规则文件
-        print("未找到现有规则文件，创建默认规则文件...")
-        # 优先在项目根目录创建
-        if project_root:
-            target_path = os.path.join(project_root, "compliance_rules.yaml")
-        else:
-            # 否则在当前工作目录创建
-            target_path = rules_path_cwd
-        
-        self._create_default_rules(target_path)
-        return target_path
-
-    def _find_project_root(self):
-        """查找项目根目录"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # 向上查找包含 .git 或 requirements.txt 的目录
-        for i in range(3):  # 最多向上3层
-            if (os.path.exists(os.path.join(current_dir, '.git')) or 
-                os.path.exists(os.path.join(current_dir, 'requirements.txt')) or
-                os.path.exists(os.path.join(current_dir, 'README.md'))):
-                return current_dir
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir == current_dir:  # 到达根目录
-                break
-            current_dir = parent_dir
-        return None
-
     def _create_default_rules(self, file_path):
-        """创建默认规则文件，增加更精确的规则描述"""
+        """创建默认规则文件"""
         default_rules = {
             "承诺收益": {
                 "保证收益": {
