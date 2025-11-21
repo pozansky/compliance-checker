@@ -10,19 +10,20 @@ from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, Any
 
 # 设置 DashScope API Key
-#os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
 os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 
 class ComplianceRAGEngine:
     def __init__(self, rules_file: str = None):
-        from .rule_loader import load_all_rules
-        from .document_builder import build_rule_documents
-        
-        # 自动查找或创建规则文件
+        # 首先查找或创建规则文件
         if rules_file is None:
             rules_file = self._find_or_create_rules_file()
         
         print(f"使用规则文件: {rules_file}")
+        
+        # 动态导入，避免在初始化前就引用
+        from rule_loader import load_all_rules
+        from document_builder import build_rule_documents
+        
         rules = load_all_rules(rules_file)
         documents = build_rule_documents(rules)
         
@@ -64,7 +65,6 @@ class ComplianceRAGEngine:
 - 使用绝对化词汇如"肯定"、"必然"、"稳赚"
 - 怂恿使用他人身份办理业务
 
-
 聊天内容：
 {input}
 
@@ -84,20 +84,57 @@ class ComplianceRAGEngine:
 
     def _find_or_create_rules_file(self):
         """查找或创建规则文件"""
-        # 获取当前文件所在目录（src目录）
+        # 方法1：先尝试当前工作目录
+        current_working_dir = os.getcwd()
+        rules_path_cwd = os.path.join(current_working_dir, "compliance_rules.yaml")
+        
+        if os.path.exists(rules_path_cwd):
+            print(f"找到规则文件（工作目录）: {rules_path_cwd}")
+            return rules_path_cwd
+        
+        # 方法2：尝试当前文件所在目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        rules_path_src = os.path.join(current_dir, "compliance_rules.yaml")
+        
+        if os.path.exists(rules_path_src):
+            print(f"找到规则文件（源码目录）: {rules_path_src}")
+            return rules_path_src
+        
+        # 方法3：尝试在项目根目录查找
+        project_root = self._find_project_root()
+        if project_root:
+            rules_path_root = os.path.join(project_root, "compliance_rules.yaml")
+            if os.path.exists(rules_path_root):
+                print(f"找到规则文件（项目根目录）: {rules_path_root}")
+                return rules_path_root
+        
+        # 如果都找不到，创建默认规则文件
+        print("未找到现有规则文件，创建默认规则文件...")
+        # 优先在项目根目录创建
+        if project_root:
+            target_path = os.path.join(project_root, "compliance_rules.yaml")
+        else:
+            # 否则在当前工作目录创建
+            target_path = rules_path_cwd
+        
+        self._create_default_rules(target_path)
+        return target_path
+
+    def _find_project_root(self):
+        """查找项目根目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # 规则文件就在当前src目录下
-        rules_path = os.path.join(current_dir, "compliance_rules.yaml")
-        
-        if os.path.exists(rules_path):
-            print(f"找到规则文件: {rules_path}")
-            return rules_path
-        
-        # 如果找不到，在当前src目录创建规则文件
-        print(f"未找到规则文件，创建在src目录: {rules_path}")
-        # self._create_default_rules(rules_path)
-        return rules_path
+        # 向上查找包含 .git 或 requirements.txt 的目录
+        for i in range(3):  # 最多向上3层
+            if (os.path.exists(os.path.join(current_dir, '.git')) or 
+                os.path.exists(os.path.join(current_dir, 'requirements.txt')) or
+                os.path.exists(os.path.join(current_dir, 'README.md'))):
+                return current_dir
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:  # 到达根目录
+                break
+            current_dir = parent_dir
+        return None
 
     def _create_default_rules(self, file_path):
         """创建默认规则文件，增加更精确的规则描述"""
@@ -274,6 +311,9 @@ class ComplianceRAGEngine:
             }
         }
         
+        # 确保目录存在
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
         # 写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
             yaml.dump(default_rules, f, allow_unicode=True, indent=2)
@@ -325,3 +365,20 @@ class ComplianceRAGEngine:
             "triggered_event": triggered_event,
             "reason": reason
         }
+
+# 使用示例
+if __name__ == "__main__":
+    # 测试引擎
+    try:
+        engine = ComplianceRAGEngine()
+        print("合规引擎初始化成功！")
+        
+        # 测试预测
+        test_text = "加我私人微信，告诉你明天必涨的股票"
+        result = engine.predict(test_text)
+        print(f"测试结果: {result}")
+        
+    except Exception as e:
+        print(f"初始化失败: {e}")
+        import traceback
+        traceback.print_exc()
