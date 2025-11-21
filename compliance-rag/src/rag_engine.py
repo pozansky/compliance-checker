@@ -14,24 +14,24 @@ from typing import Dict, Any
 os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
 class ComplianceRAGEngine:
     def __init__(self, rules_file: str = None):
-        from .rule_loader import load_all_rules
-        from .document_builder import build_rule_documents
+        # from .rule_loader import load_all_rules
+        # from .document_builder import build_rule_documents
         
-        # 自动查找或创建规则文件
-        if rules_file is None:
-            rules_file = self._find_or_create_rules_file()
+        # # 自动查找或创建规则文件
+        # if rules_file is None:
+        #     rules_file = self._find_or_create_rules_file()
         
-        print(f"使用规则文件: {rules_file}")
-        rules = load_all_rules(rules_file)
-        documents = build_rule_documents(rules)
+        # print(f"使用规则文件: {rules_file}")
+        # rules = load_all_rules(rules_file)
+        # documents = build_rule_documents(rules)
         
-        # 使用 HuggingFace 本地嵌入模型
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-        )
+        # # 使用 HuggingFace 本地嵌入模型
+        # embeddings = HuggingFaceEmbeddings(
+        #     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        # )
         
-        self.vectorstore = FAISS.from_documents(documents, embeddings)
-        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
+        # self.vectorstore = FAISS.from_documents(documents, embeddings)
+        # self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
         
         # 使用 DashScope 的 Qwen 模型
         self.llm = ChatOpenAI(
