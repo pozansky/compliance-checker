@@ -22,8 +22,8 @@ st.set_page_config(
 def load_engine():
     try:
         # 设置 DashScope API Key
-        #os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
-        os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
+        os.environ["DASHSCOPE_API_KEY"] = "sk-2061ea9f55e446ffa570d8ac2510d401"
+        #os.environ["DASHSCOPE_API_KEY"] = "sk-a677631fd47a4e2184b6836f6097f0b5"
         engine = ComplianceRAGEngine()
         return engine
     except Exception as e:
